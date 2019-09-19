@@ -12,6 +12,8 @@
 #include <view-transform.hpp>
 #include <signal-definitions.hpp>
 #include "deco-subsurface.hpp"
+#include "deco-button.hpp"
+#include "cairo-util.hpp"
 
 #include <cairo.h>
 
@@ -24,7 +26,7 @@ extern "C"
 #undef static
 }
 
-const int titlebar_thickness = 30;
+const int titlebar_thickness = 100;
 const int resize_edge_threshold = 5;
 const int normal_thickness = resize_edge_threshold;
 
@@ -53,19 +55,8 @@ GLuint get_text_texture(int width, int height,
 
     cairo_destroy(cr);
 
-    auto src = cairo_image_surface_get_data(surface);
-
-    GLuint tex;
-    GL_CALL(glGenTextures(1, &tex));
-    GL_CALL(glBindTexture(GL_TEXTURE_2D, tex));
-
-    GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
-            GL_RGBA, GL_UNSIGNED_BYTE, src));
-
+    GLuint tex = -1;
+    cairo_surface_upload_to_texture(surface, tex);
     cairo_surface_destroy(surface);
 
     return tex;
@@ -117,6 +108,7 @@ class simple_decoration_surface : public wf::surface_interface_t,
         view->disconnect_signal("title-changed", &title_set);
     }
 
+    wf::decor::button_t button;
 
     /* wf::surface_interface_t implementation */
     virtual bool is_mapped() const final
@@ -173,6 +165,9 @@ class simple_decoration_surface : public wf::surface_interface_t,
 
         GL_CALL(glUseProgram(0));
         OpenGL::render_end();
+
+        button.set_button_type(wf::decor::BUTTON_CLOSE);
+        button.render(fb, {x - 10, y - 10, titlebar_thickness, titlebar_thickness});
     }
 
     /* The region which is only the frame. Origin is 0,0 */
