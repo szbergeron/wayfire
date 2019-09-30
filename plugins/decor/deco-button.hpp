@@ -5,6 +5,7 @@
 #include <surface.hpp>
 #include <animation.hpp>
 #include <render-manager.hpp>
+#include <nonstd/noncopyable.hpp>
 
 #include <cairo.h>
 
@@ -18,7 +19,7 @@ enum button_type_t
     BUTTON_CLOSE,
 };
 
-class button_t
+class button_t : public noncopyable_t
 {
   public:
     /**
@@ -50,8 +51,10 @@ class button_t
      *
      * @param buffer The target framebuffer
      * @param geometry The geometry of the button, in logical coordinates
+     * @param scissor The scissor rectangle to render.
      */
-    void render(const wf_framebuffer& buffer, wf_geometry geometry);
+    void render(const wf_framebuffer& buffer, wf_geometry geometry,
+        wf_geometry scissor);
 
   private:
     /* Whether the button needs repaint */

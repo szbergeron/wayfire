@@ -12,7 +12,7 @@
 #include <view-transform.hpp>
 #include <signal-definitions.hpp>
 #include "deco-subsurface.hpp"
-#include "deco-button.hpp"
+#include "deco-layout.hpp"
 #include "cairo-util.hpp"
 
 #include <cairo.h>
@@ -81,10 +81,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
 
     GLuint tex = -1;
 
+    wf::decor::decoration_layout_t layout;
+    wf_region cached_region;
 
   public:
-    simple_decoration_surface(wayfire_view view, wf_option font)
-        : surface_interface_t(view.get())
+    simple_decoration_surface(wayfire_view view, wf_option font) :
+        surface_interface_t(view.get()),
+        layout(titlebar_thickness - resize_edge_threshold, resize_edge_threshold)
     {
         this->font_option = font;
         this->view = view;
@@ -108,8 +111,6 @@ class simple_decoration_surface : public wf::surface_interface_t,
         view->disconnect_signal("title-changed", &title_set);
     }
 
-    wf::decor::button_t button;
-
     /* wf::surface_interface_t implementation */
     virtual bool is_mapped() const final
     {
@@ -126,12 +127,9 @@ class simple_decoration_surface : public wf::surface_interface_t,
         return {width, height};
     }
 
-    void render_box(const wf_framebuffer& fb, int x, int y,
-        const wlr_box& scissor)
+    void render_background(const wf_framebuffer& fb,
+        wf_geometry geometry)
     {
-        wlr_box geometry {x, y, width, height};
-        geometry = fb.damage_box_from_geometry_box(geometry);
-
         float projection[9];
         wlr_matrix_projection(projection,
             fb.viewport_width, fb.viewport_height,
@@ -141,12 +139,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
         wlr_matrix_project_box(matrix, &geometry,
             WL_OUTPUT_TRANSFORM_NORMAL, 0, projection);
 
-        OpenGL::render_begin(fb);
-        fb.scissor(scissor);
-
         wlr_render_quad_with_matrix(wf::get_core().renderer,
             active ? border_color : border_color_inactive, matrix);
+    }
 
+    void render_title(const wf_framebuffer& fb,
+        wf_geometry geometry)
+    {
         if (tex == (uint)-1)
         {
             tex = get_text_texture(width * fb.scale, titlebar * fb.scale,
@@ -154,37 +153,46 @@ class simple_decoration_surface : public wf::surface_interface_t,
         }
 
         gl_geometry gg;
-        gg.x1 = x + fb.geometry.x;
-        gg.y1 = y + fb.geometry.y;
-        gg.x2 = gg.x1 + width;
-        gg.y2 = gg.y1 + titlebar;
+        gg.x1 = geometry.x + fb.geometry.x;
+        gg.y1 = geometry.y + fb.geometry.y;
+        gg.x2 = gg.x1 + geometry.width;
+        gg.y2 = gg.y1 + geometry.height;
 
         OpenGL::render_transformed_texture(tex, gg, {},
             fb.get_orthographic_projection(), {1, 1, 1, 1},
             TEXTURE_TRANSFORM_INVERT_Y);
-
-        GL_CALL(glUseProgram(0));
-        OpenGL::render_end();
-
-        button.set_button_type(wf::decor::BUTTON_CLOSE);
-        button.render(fb, {x - 10, y - 10, titlebar_thickness, titlebar_thickness});
     }
 
-    /* The region which is only the frame. Origin is 0,0 */
-    wf_region frame_region;
-    void update_frame_region()
+    void render_scissor_box(const wf_framebuffer& fb, wf_point origin,
+        const wlr_box& scissor)
     {
-        frame_region.clear();
-        frame_region |= {0, 0, width, titlebar}; // top
-        frame_region |= {0, 0, thickness, height}; // left
-        frame_region |= {(width - thickness), 0, thickness, height}; // right
-        frame_region |= {0, (height - thickness), width, thickness}; // bottom
+        wlr_box geometry {origin.x, origin.y, width, height};
+        geometry = fb.damage_box_from_geometry_box(geometry);
+        auto renderables = layout.get_renderable_areas();
+
+        OpenGL::render_begin(fb);
+        fb.scissor(scissor);
+        render_background(fb, geometry);
+        OpenGL::render_end();
+
+        for (auto item : renderables)
+        {
+            if (item->get_type() == wf::decor::DECORATION_AREA_TITLE) {
+                OpenGL::render_begin(fb);
+                fb.scissor(scissor);
+                render_title(fb, item->get_geometry() + origin);
+                OpenGL::render_end();
+            } else { // button
+                item->as_button().render(fb,
+                    item->get_geometry() + origin, scissor);
+            }
+        }
     }
 
     virtual void simple_render(const wf_framebuffer& fb, int x, int y,
         const wf_region& damage) override
     {
-        wf_region frame = this->frame_region + wf_point{x, y};
+        wf_region frame = this->cached_region + wf_point{x, y};
         frame *= fb.scale;
         frame &= damage;
 
@@ -192,13 +200,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
         {
             auto sbox = fb.framebuffer_box_from_damage_box(
                 wlr_box_from_pixman_box(box));
-            render_box(fb, x, y, sbox);
+            render_scissor_box(fb, {x, y}, sbox);
         }
     }
 
     bool accepts_input(int32_t sx, int32_t sy) override
     {
-        return pixman_region32_contains_point(frame_region.to_pixman(),
+        return pixman_region32_contains_point(cached_region.to_pixman(),
             sx, sy, NULL);
     }
 
@@ -323,10 +331,11 @@ class simple_decoration_surface : public wf::surface_interface_t,
         }
 
         tex = -1;
-
         width = view_geometry.width;
         height = view_geometry.height;
-        update_frame_region();
+
+        layout.resize(width, height);
+        this->cached_region = layout.calculate_region();
 
         view->damage();
     };
@@ -345,12 +354,12 @@ class simple_decoration_surface : public wf::surface_interface_t,
             thickness = normal_thickness;
             titlebar = titlebar_thickness;
         }
+        this->cached_region = layout.calculate_region();
     }
 
     virtual void notify_view_fullscreen() override
     {
         update_decoration_size();
-        update_frame_region();
     };
 };
 

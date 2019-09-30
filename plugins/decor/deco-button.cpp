@@ -26,11 +26,13 @@ bool button_t::needs_repaint()
     return true;
 }
 
-void button_t::render(const wf_framebuffer& fb, wf_geometry geometry)
+void button_t::render(const wf_framebuffer& fb, wf_geometry geometry,
+    wf_geometry scissor)
 {
     assert(this->button_texture != uint32_t(-1));
 
     OpenGL::render_begin(fb);
+    fb.scissor(scissor);
 
     gl_geometry gg;
     gg.x1 = geometry.x + fb.geometry.x;
