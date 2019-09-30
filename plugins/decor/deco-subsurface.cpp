@@ -30,7 +30,7 @@ const int titlebar_thickness = 100;
 const int resize_edge_threshold = 5;
 const int normal_thickness = resize_edge_threshold;
 
-GLuint get_text_texture(int width, int height,
+void get_text_texture(GLuint& tex, int width, int height,
     std::string text, std::string cairo_font)
 {
     const auto format = CAIRO_FORMAT_ARGB32;
@@ -55,11 +55,8 @@ GLuint get_text_texture(int width, int height,
 
     cairo_destroy(cr);
 
-    GLuint tex = -1;
     cairo_surface_upload_to_texture(surface, tex);
     cairo_surface_destroy(surface);
-
-    return tex;
 }
 
 class simple_decoration_surface : public wf::surface_interface_t,
@@ -79,7 +76,11 @@ class simple_decoration_surface : public wf::surface_interface_t,
     float border_color[4] = {0.15f, 0.15f, 0.15f, 0.8f};
     float border_color_inactive[4] = {0.25f, 0.25f, 0.25f, 0.95f};
 
-    GLuint tex = -1;
+    struct {
+        GLuint tex = -1;
+        int width = 0;
+        int height = 0;
+    } title_texture;
 
     wf::decor::decoration_layout_t layout;
     wf_region cached_region;
@@ -146,9 +147,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
     void render_title(const wf_framebuffer& fb,
         wf_geometry geometry)
     {
-        if (tex == (uint)-1)
+        int target_width = geometry.width * fb.scale;
+        int target_height = geometry.height * fb.scale;
+
+        if (title_texture.width != target_width ||
+            title_texture.height != target_height)
         {
-            tex = get_text_texture(width * fb.scale, titlebar * fb.scale,
+            get_text_texture(title_texture.tex, target_width, target_height,
                 view->get_title(), font_option->as_string());
         }
 
@@ -158,7 +163,7 @@ class simple_decoration_surface : public wf::surface_interface_t,
         gg.x2 = gg.x1 + geometry.width;
         gg.y2 = gg.y1 + geometry.height;
 
-        OpenGL::render_transformed_texture(tex, gg, {},
+        OpenGL::render_transformed_texture(title_texture.tex, gg, {},
             fb.get_orthographic_projection(), {1, 1, 1, 1},
             TEXTURE_TRANSFORM_INVERT_Y);
     }
@@ -324,13 +329,6 @@ class simple_decoration_surface : public wf::surface_interface_t,
     virtual void notify_view_resized(wf_geometry view_geometry) override
     {
         view->damage();
-
-        if (tex != (uint32_t)-1)
-        {
-            GL_CALL(glDeleteTextures(1, &tex));
-        }
-
-        tex = -1;
         width = view_geometry.width;
         height = view_geometry.height;
 

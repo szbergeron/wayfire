@@ -53,7 +53,7 @@ void decoration_layout_t::resize(int width, int height)
     /* Close button */
     wf_geometry button_geometry = {
         width - border_size - button_padding - button_width,
-        button_padding,
+        button_padding + border_size,
         button_width,
         button_height,
     };
@@ -63,12 +63,14 @@ void decoration_layout_t::resize(int width, int height)
     this->layout_areas.back()->as_button().set_button_type(BUTTON_CLOSE);
 
     /* Padding around the button, allows move */
-    button_geometry.x -= button_padding;
-    button_geometry.y -= button_padding;
-    button_geometry.width += 2 * button_padding;
-    button_geometry.height += 2 * button_padding;
+    wf_geometry button_geometry_expanded = {
+        button_geometry.x - button_padding,
+        border_size,
+        button_geometry.width + 2 * button_padding,
+        titlebar_size
+    };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
-            DECORATION_AREA_MOVE, button_geometry));
+            DECORATION_AREA_MOVE, button_geometry_expanded));
 
     /* Titlebar dragging area (for move) */
     wf_geometry title_geometry = {
@@ -76,7 +78,7 @@ void decoration_layout_t::resize(int width, int height)
         border_size,
         /* Up to the button, but subtract the padding to the left of the title
          * and the padding between title and button */
-        button_geometry.x - border_size,
+        button_geometry_expanded.x - border_size,
         titlebar_size,
     };
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
