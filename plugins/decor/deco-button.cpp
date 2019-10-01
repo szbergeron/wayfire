@@ -1,4 +1,5 @@
 #include "deco-button.hpp"
+#include "deco-theme.hpp"
 #include <opengl.hpp>
 #include <cairo-util.hpp>
 
@@ -7,13 +8,18 @@ namespace wf
 namespace decor
 {
 
+button_t::button_t(const decoration_theme_t& t)
+    : theme(t) {}
+
 void button_t::set_button_type(button_type_t type)
 {
-    // FIXME: path
-    // FIXME: different button types
-    this->button_icon = cairo_image_surface_create_from_png(
-        "/home/ilex/work/wayfire/plugins/decor/resources/close.png");
+    this->type = type;
     update_texture();
+}
+
+button_type_t button_t::get_button_type() const
+{
+    return this->type;
 }
 
 void button_t::set_hover(bool is_hovered)
@@ -49,37 +55,14 @@ void button_t::render(const wf_framebuffer& fb, wf_geometry geometry,
 
 void button_t::update_texture()
 {
-    if (!button_icon)
-        return;
-
     // XXX: we render at a predefined resolution here ...
     const int WIDTH = 60;
     const int HEIGHT = 30;
 
-    if (!this->button_surface)
-    {
-        this->button_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-            WIDTH, HEIGHT);
-        this->cr = cairo_create(this->button_surface);
-    }
-
-    /* Clear the button background */
-    cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_set_source_rgba(cr, 0, 0, 0, 0);
-    cairo_fill(cr);
-
-    /* Render button itself */
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
-    cairo_scale(cr, 1.0 * WIDTH / cairo_image_surface_get_width(button_icon),
-        1.0 * HEIGHT / cairo_image_surface_get_height(button_icon));
-    cairo_set_source_surface(cr, this->button_icon, 0, 0);
-    cairo_fill(cr);
-
-    /* Upload to GPU */
-    cairo_surface_upload_to_texture(this->button_surface,
-        this->button_texture);
+    auto surface = theme.get_button_surface(type, WIDTH, HEIGHT);
+    OpenGL::render_begin();
+    cairo_surface_upload_to_texture(surface, this->button_texture);
+    OpenGL::render_end();
 }
 
 }

@@ -1,4 +1,6 @@
 #include "deco-layout.hpp"
+#include "debug.hpp"
+#include "deco-theme.hpp"
 
 #define BUTTON_ASPECT_RATIO 1.5
 #define BUTTON_HEIGHT_PC 0.8
@@ -15,8 +17,18 @@ decoration_area_t::decoration_area_t(decoration_area_type_t type, wf_geometry g)
     this->type = type;
     this->geometry = g;
 
-    if (this->type == DECORATION_AREA_BUTTON)
-        button = std::make_unique<button_t>();
+    assert(type != DECORATION_AREA_BUTTON);
+}
+
+/**
+ * Initialize a new decoration area holding a button
+ */
+decoration_area_t::decoration_area_t(wf_geometry g,
+    const decoration_theme_t& theme)
+{
+    this->type  = DECORATION_AREA_BUTTON;
+    this->geometry = g;
+    this->button = std::make_unique<button_t> (theme);
 }
 
 wf_geometry decoration_area_t::get_geometry() const
@@ -35,13 +47,15 @@ decoration_area_type_t decoration_area_t::get_type() const
     return type;
 }
 
-decoration_layout_t::decoration_layout_t(int thickness, int border) :
-    titlebar_size(thickness),
-    border_size(border),
+decoration_layout_t::decoration_layout_t(const decoration_theme_t& th) :
+    titlebar_size(th.get_title_height()),
+    border_size(th.get_border_size()),
     button_width(titlebar_size * BUTTON_HEIGHT_PC * BUTTON_ASPECT_RATIO),
     button_height(titlebar_size * BUTTON_HEIGHT_PC),
-    button_padding((titlebar_size - button_height) / 2)
+    button_padding((titlebar_size - button_height) / 2),
+    theme(th)
 {
+    log_info("%d %d %d %d %d", titlebar_size, border_size, button_width, button_height, button_padding);
     assert(titlebar_size >= border_size);
 }
 
@@ -59,7 +73,7 @@ void decoration_layout_t::resize(int width, int height)
     };
 
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
-            DECORATION_AREA_BUTTON, button_geometry));
+            button_geometry, theme));
     this->layout_areas.back()->as_button().set_button_type(BUTTON_CLOSE);
 
     /* Padding around the button, allows move */

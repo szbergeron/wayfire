@@ -29,6 +29,11 @@ struct decoration_area_t
      */
     decoration_area_t(decoration_area_type_t type, wf_geometry g);
 
+    /**
+     * Initialize a new decoration area holding a button
+     */
+    decoration_area_t(wf_geometry g, const decoration_theme_t& theme);
+
     /** @return The geometry of the decoration area, relative to the layout */
     wf_geometry get_geometry() const;
 
@@ -64,7 +69,7 @@ enum decoration_layout_action_t
     DECORATION_ACTION_MINIMIZE = 5,
 };
 
-struct decoration_area_t; /* Fwd */
+class decoration_theme_t;
 /**
  * Manages the layout of the decorations, i.e positioning of the title,
  * buttons, etc.
@@ -75,12 +80,10 @@ class decoration_layout_t
 {
   public:
     /**
-     * Create a new decoration layout with the given parameters.
-     *
-     * @titlebar_height The height of the titlebar, i.e the text of the title
-     * @border_width The width of the border around the view
+     * Create a new decoration layout for the given theme.
+     * When the theme changes, the decoration layout needs to be created again.
      */
-    decoration_layout_t(int titlebar_height, int border_width);
+    decoration_layout_t(const decoration_theme_t& theme);
 
     /** Regenerate layout using the new size */
     void resize(int width, int height);
@@ -117,6 +120,7 @@ class decoration_layout_t
     const int button_width;
     const int button_height;
     const int button_padding;
+    const decoration_theme_t& theme;
 
     std::vector<std::unique_ptr<decoration_area_t>> layout_areas;
 

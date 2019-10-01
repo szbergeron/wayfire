@@ -13,6 +13,7 @@ namespace wf
 {
 namespace decor
 {
+class decoration_theme_t;
 
 enum button_type_t
 {
@@ -22,11 +23,16 @@ enum button_type_t
 class button_t : public noncopyable_t
 {
   public:
+    button_t(const decoration_theme_t& theme);
+
     /**
      * Set the type of the button. This will affect the displayed icon and
      * potentially other appearance like colors.
      */
     void set_button_type(button_type_t type);
+
+    /** @return The type of the button */
+    button_type_t get_button_type() const;
 
     /**
      * Set the button hover state.
@@ -57,12 +63,11 @@ class button_t : public noncopyable_t
         wf_geometry scissor);
 
   private:
+    const decoration_theme_t& theme;
+
     /* Whether the button needs repaint */
     bool damaged = false;
-
-    cairo_t *cr = nullptr;
-    cairo_surface_t *button_icon = nullptr;
-    cairo_surface_t *button_surface = nullptr;
+    button_type_t type;
     uint32_t button_texture = -1;
 
     /**

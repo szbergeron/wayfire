@@ -13,6 +13,7 @@
 #include <signal-definitions.hpp>
 #include "deco-subsurface.hpp"
 #include "deco-layout.hpp"
+#include "deco-theme.hpp"
 #include "cairo-util.hpp"
 
 #include <cairo.h>
@@ -26,84 +27,66 @@ extern "C"
 #undef static
 }
 
-const int titlebar_thickness = 100;
-const int resize_edge_threshold = 5;
-const int normal_thickness = resize_edge_threshold;
-
-void get_text_texture(GLuint& tex, int width, int height,
-    std::string text, std::string cairo_font)
-{
-    const auto format = CAIRO_FORMAT_ARGB32;
-    auto surface = cairo_image_surface_create(format, width, height);
-    auto cr = cairo_create(surface);
-
-    const float font_scale = 0.8;
-    const float font_size = height * font_scale;
-
-    // render text
-    cairo_select_font_face(cr, cairo_font.c_str(), CAIRO_FONT_SLANT_NORMAL,
-        CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_source_rgba(cr, 1, 1, 1, 1);
-
-    cairo_set_font_size(cr, font_size);
-
-    cairo_text_extents_t ext;
-    cairo_text_extents(cr, text.c_str(), &ext);
-
-    cairo_move_to(cr, normal_thickness, font_size);
-    cairo_show_text(cr, text.c_str());
-
-    cairo_destroy(cr);
-
-    cairo_surface_upload_to_texture(surface, tex);
-    cairo_surface_destroy(surface);
-}
-
 class simple_decoration_surface : public wf::surface_interface_t,
     public wf::compositor_surface_t, public wf_decorator_frame_t
 {
     bool _mapped = true;
-    int thickness = normal_thickness;
-    int titlebar = titlebar_thickness;
+    int current_thickness;
+    int current_titlebar;
 
     wayfire_view view;
-    wf_option font_option;
-    wf::signal_callback_t title_set;
+
+    wf::signal_callback_t title_set = [=] (wf::signal_data_t *data)
+    {
+        if (get_signaled_view(data) == view)
+            view->damage(); // trigger re-render
+    };
+
+    void update_title(int width, int height, double scale)
+    {
+        int target_width = width * scale;
+        int target_height = height * scale;
+
+        if (title_texture.width != target_width ||
+            title_texture.height != target_height ||
+            title_texture.current_text != view->get_title())
+        {
+            auto surface = theme.render_text(view->get_title(),
+                target_width, target_height);
+            cairo_surface_upload_to_texture(surface, title_texture.tex);
+
+            title_texture.width = target_width;
+            title_texture.height = target_height;
+            title_texture.current_text = view->get_title();
+        }
+    }
 
     int width = 100, height = 100;
 
     bool active = true; // when views are mapped, they are usually activated
-    float border_color[4] = {0.15f, 0.15f, 0.15f, 0.8f};
-    float border_color_inactive[4] = {0.25f, 0.25f, 0.25f, 0.95f};
-
     struct {
         GLuint tex = -1;
         int width = 0;
         int height = 0;
+        std::string current_text = "";
     } title_texture;
 
+    wf::decor::decoration_theme_t theme;
     wf::decor::decoration_layout_t layout;
     wf_region cached_region;
 
   public:
     simple_decoration_surface(wayfire_view view, wf_option font) :
         surface_interface_t(view.get()),
-        layout(titlebar_thickness - resize_edge_threshold, resize_edge_threshold)
+        theme{},
+        layout{theme}
     {
-        this->font_option = font;
         this->view = view;
-
-        title_set = [=] (wf::signal_data_t *data)
-        {
-            if (get_signaled_view(data) == view)
-                notify_view_resized(view->get_wm_geometry());
-        };
         view->connect_signal("title-changed", &title_set);
 
         // make sure to hide frame if the view is fullscreen
         update_decoration_size();
     }
-
 
     virtual ~simple_decoration_surface()
     {
@@ -120,7 +103,7 @@ class simple_decoration_surface : public wf::surface_interface_t,
 
     wf_point get_offset() final
     {
-        return { -thickness, -titlebar };
+        return { -current_thickness, -current_titlebar };
     }
 
     virtual wf_size_t get_size() const final
@@ -128,58 +111,22 @@ class simple_decoration_surface : public wf::surface_interface_t,
         return {width, height};
     }
 
-    void render_background(const wf_framebuffer& fb,
-        wf_geometry geometry)
-    {
-        float projection[9];
-        wlr_matrix_projection(projection,
-            fb.viewport_width, fb.viewport_height,
-            (wl_output_transform)fb.wl_transform);
-
-        float matrix[9];
-        wlr_matrix_project_box(matrix, &geometry,
-            WL_OUTPUT_TRANSFORM_NORMAL, 0, projection);
-
-        wlr_render_quad_with_matrix(wf::get_core().renderer,
-            active ? border_color : border_color_inactive, matrix);
-    }
-
     void render_title(const wf_framebuffer& fb,
         wf_geometry geometry)
     {
-        int target_width = geometry.width * fb.scale;
-        int target_height = geometry.height * fb.scale;
-
-        if (title_texture.width != target_width ||
-            title_texture.height != target_height)
-        {
-            get_text_texture(title_texture.tex, target_width, target_height,
-                view->get_title(), font_option->as_string());
-        }
-
-        gl_geometry gg;
-        gg.x1 = geometry.x + fb.geometry.x;
-        gg.y1 = geometry.y + fb.geometry.y;
-        gg.x2 = gg.x1 + geometry.width;
-        gg.y2 = gg.y1 + geometry.height;
-
-        OpenGL::render_transformed_texture(title_texture.tex, gg, {},
-            fb.get_orthographic_projection(), {1, 1, 1, 1},
-            TEXTURE_TRANSFORM_INVERT_Y);
+        update_title(geometry.width, geometry.height, fb.scale);
+        render_gl_texture(fb, geometry, title_texture.tex);
     }
 
     void render_scissor_box(const wf_framebuffer& fb, wf_point origin,
         const wlr_box& scissor)
     {
+        /* Clear background */
         wlr_box geometry {origin.x, origin.y, width, height};
-        geometry = fb.damage_box_from_geometry_box(geometry);
+        theme.render_background(fb, geometry, scissor, active);
+
+        /* Draw title & buttons */
         auto renderables = layout.get_renderable_areas();
-
-        OpenGL::render_begin(fb);
-        fb.scissor(scissor);
-        render_background(fb, geometry);
-        OpenGL::render_end();
-
         for (auto item : renderables)
         {
             if (item->get_type() == wf::decor::DECORATION_AREA_TITLE) {
@@ -254,13 +201,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
     uint32_t get_edges(int x, int y)
     {
         uint32_t edges = 0;
-        if (x <= thickness)
+        if (x <= current_thickness)
             edges |= WLR_EDGE_LEFT;
-        if (x >= width - thickness)
+        if (x >= width - current_thickness)
             edges |= WLR_EDGE_RIGHT;
-        if (y <= thickness)
+        if (y <= current_thickness)
             edges |= WLR_EDGE_TOP;
-        if (y >= height - thickness)
+        if (y >= height - current_thickness)
             edges |= WLR_EDGE_BOTTOM;
 
         return edges;
@@ -300,10 +247,10 @@ class simple_decoration_surface : public wf::surface_interface_t,
     virtual wf_geometry expand_wm_geometry(
         wf_geometry contained_wm_geometry) override
     {
-        contained_wm_geometry.x -= thickness;
-        contained_wm_geometry.y -= titlebar;
-        contained_wm_geometry.width += 2 * thickness;
-        contained_wm_geometry.height += thickness + titlebar;
+        contained_wm_geometry.x -= current_thickness;
+        contained_wm_geometry.y -= current_titlebar;
+        contained_wm_geometry.width += 2 * current_thickness;
+        contained_wm_geometry.height += current_thickness + current_titlebar;
 
         return contained_wm_geometry;
     }
@@ -311,8 +258,8 @@ class simple_decoration_surface : public wf::surface_interface_t,
     virtual void calculate_resize_size(
         int& target_width, int& target_height) override
     {
-        target_width -= 2 * thickness;
-        target_height -= thickness + titlebar;
+        target_width -= 2 * current_thickness;
+        target_height -= current_thickness + current_titlebar;
 
         target_width = std::max(target_width, 1);
         target_height = std::max(target_height, 1);
@@ -345,12 +292,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
     {
         if (view->fullscreen)
         {
-            thickness = 0;
-            titlebar = 0;
+            current_thickness = 0;
+            current_titlebar = 0;
         } else
         {
-            thickness = normal_thickness;
-            titlebar = titlebar_thickness;
+            current_thickness = theme.get_border_size();
+            current_titlebar =
+                theme.get_title_height() + theme.get_border_size();
         }
         this->cached_region = layout.calculate_region();
     }
