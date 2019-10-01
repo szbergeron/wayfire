@@ -1,6 +1,12 @@
 #include "deco-layout.hpp"
 #include "debug.hpp"
 #include "deco-theme.hpp"
+#include <core.hpp>
+
+extern "C"
+{
+#include <wlr/types/wlr_xcursor_manager.h>
+}
 
 #define BUTTON_ASPECT_RATIO 1.5
 #define BUTTON_HEIGHT_PC 0.8
@@ -55,7 +61,6 @@ decoration_layout_t::decoration_layout_t(const decoration_theme_t& th) :
     button_padding((titlebar_size - button_height) / 2),
     theme(th)
 {
-    log_info("%d %d %d %d %d", titlebar_size, border_size, button_width, button_height, button_padding);
     assert(titlebar_size >= border_size);
 }
 
@@ -101,22 +106,22 @@ void decoration_layout_t::resize(int width, int height)
     /* Resizing edges - left */
     wf_geometry border_geometry = { 0, 0, border_size, height };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
-            DECORATION_AREA_RESIZE, border_geometry));
+            DECORATION_AREA_RESIZE_LEFT, border_geometry));
 
     /* Resizing edges - right */
     border_geometry = { width - border_size, 0, border_size, height };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
-            DECORATION_AREA_RESIZE, border_geometry));
+            DECORATION_AREA_RESIZE_RIGHT, border_geometry));
 
     /* Resizing edges - top */
     border_geometry = { 0, 0, width, border_size };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
-            DECORATION_AREA_RESIZE, border_geometry));
+            DECORATION_AREA_RESIZE_TOP, border_geometry));
 
     /* Resizing edges - bottom */
     border_geometry = { 0, height - border_size, width, border_size };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
-            DECORATION_AREA_RESIZE, border_geometry));
+            DECORATION_AREA_RESIZE_BOTTOM, border_geometry));
 }
 
 /**
@@ -149,6 +154,7 @@ wf_region decoration_layout_t::calculate_region() const
 void decoration_layout_t::handle_motion(int x, int y)
 {
     this->current_input = {x, y};
+    update_cursor();
     /* TODO: hover */
 }
 
@@ -159,15 +165,16 @@ void decoration_layout_t::handle_motion(int x, int y)
  * @return The action which needs to be carried out in response to this
  *  event.
  * */
-decoration_layout_action_t decoration_layout_t::handle_press_event(bool pressed)
+decoration_layout_t::action_response_t
+decoration_layout_t::handle_press_event(bool pressed)
 {
     if (pressed)
     {
         auto area = find_area_at(current_input);
-        if (area && area->get_type() == DECORATION_AREA_MOVE)
-            return DECORATION_ACTION_MOVE;
-        if (area && area->get_type() == DECORATION_AREA_RESIZE)
-            return DECORATION_ACTION_RESIZE;
+        if (area && (area->get_type() & DECORATION_AREA_MOVE_BIT))
+            return {DECORATION_ACTION_MOVE, 0};
+        if (area && (area->get_type() & DECORATION_AREA_RESIZE_BIT))
+            return {DECORATION_ACTION_RESIZE, calculate_resize_edges()};
 
         is_grabbed = true;
         grab_origin = current_input;
@@ -182,12 +189,18 @@ decoration_layout_action_t decoration_layout_t::handle_press_event(bool pressed)
         {
             if (begin_area->get_type() == DECORATION_AREA_BUTTON)
             {
-                /* TODO: return button action */
+                switch (begin_area->as_button().get_button_type())
+                {
+                    case BUTTON_CLOSE:
+                        return {DECORATION_ACTION_CLOSE, 0};
+                    default:
+                        break;
+                }
             }
         }
     }
 
-    return DECORATION_ACTION_NONE;
+    return {DECORATION_ACTION_NONE, 0};
 }
 
 /**
@@ -204,6 +217,31 @@ decoration_layout_t::find_area_at(wf_point point)
     }
 
     return nullptr;
+}
+
+/** Calculate resize edges based on @current_input */
+uint32_t decoration_layout_t::calculate_resize_edges() const
+{
+    uint32_t edges = 0;
+    for (auto& area : layout_areas)
+    {
+        if (area->get_geometry() & this->current_input)
+        {
+            if (area->get_type() & DECORATION_AREA_RESIZE_BIT)
+                edges |= (area->get_type() & ~DECORATION_AREA_RESIZE_BIT);
+        }
+    }
+
+    return edges;
+}
+
+/** Update the cursor based on @current_input */
+void decoration_layout_t::update_cursor() const
+{
+    uint32_t edges = calculate_resize_edges();
+    auto cursor_name = edges > 0 ?
+        wlr_xcursor_get_resize_name((wlr_edges) edges) : "default";
+    wf::get_core().set_cursor(cursor_name);
 }
 
 void decoration_layout_t::handle_focus_lost()

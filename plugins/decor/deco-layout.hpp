@@ -3,19 +3,32 @@
 #include <vector>
 #include <util.hpp>
 #include "deco-button.hpp"
+extern "C"
+{
+#include <wlr/util/edges.h>
+}
 
 namespace wf
 {
 namespace decor
 {
 static constexpr uint32_t DECORATION_AREA_RENDERABLE_BIT = (1 << 16);
+static constexpr uint32_t DECORATION_AREA_RESIZE_BIT     = (1 << 17);
+static constexpr uint32_t DECORATION_AREA_MOVE_BIT       = (1 << 18);
+
+
 /** Different types of areas around the decoration */
 enum decoration_area_type_t
 {
-    DECORATION_AREA_MOVE = 0,
-    DECORATION_AREA_TITLE = 1 | DECORATION_AREA_RENDERABLE_BIT,
-    DECORATION_AREA_RESIZE = 2,
-    DECORATION_AREA_BUTTON = 3 | DECORATION_AREA_RENDERABLE_BIT,
+    DECORATION_AREA_MOVE          = DECORATION_AREA_MOVE_BIT,
+    DECORATION_AREA_TITLE         =
+        DECORATION_AREA_MOVE_BIT | DECORATION_AREA_RENDERABLE_BIT,
+    DECORATION_AREA_BUTTON        = DECORATION_AREA_RENDERABLE_BIT,
+
+    DECORATION_AREA_RESIZE_LEFT   = WLR_EDGE_LEFT  |DECORATION_AREA_RESIZE_BIT,
+    DECORATION_AREA_RESIZE_RIGHT  = WLR_EDGE_RIGHT |DECORATION_AREA_RESIZE_BIT,
+    DECORATION_AREA_RESIZE_TOP    = WLR_EDGE_TOP   |DECORATION_AREA_RESIZE_BIT,
+    DECORATION_AREA_RESIZE_BOTTOM = WLR_EDGE_BOTTOM|DECORATION_AREA_RESIZE_BIT,
 };
 
 /**
@@ -100,6 +113,12 @@ class decoration_layout_t
     /** Handle motion event to (x, y) relative to the decoration */
     void handle_motion(int x, int y);
 
+    struct action_response_t {
+        decoration_layout_action_t action;
+        /* For resizing action, determine the edges for resize request */
+        uint32_t edges;
+    };
+
     /**
      * Handle press or release event.
      * @param pressed Whether the event is a press(true) or release(false)
@@ -107,7 +126,7 @@ class decoration_layout_t
      * @return The action which needs to be carried out in response to this
      *  event.
      */
-    decoration_layout_action_t handle_press_event(bool pressed = true);
+    action_response_t handle_press_event(bool pressed = true);
 
     /**
      * Handle focus lost event.
@@ -122,6 +141,8 @@ class decoration_layout_t
     const int button_padding;
     const decoration_theme_t& theme;
 
+    int total_width = 0;
+    int total_height = 0;
     std::vector<std::unique_ptr<decoration_area_t>> layout_areas;
 
     bool is_grabbed = false;
@@ -129,6 +150,11 @@ class decoration_layout_t
     wf_point grab_origin;
     /* Last position of the input */
     wf_point current_input;
+
+    /** Calculate resize edges based on @current_input */
+    uint32_t calculate_resize_edges() const;
+    /** Update the cursor based on @current_input */
+    void update_cursor() const;
 
     /**
      * Find the layout area at the given coordinates, if any

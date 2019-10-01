@@ -164,24 +164,13 @@ class simple_decoration_surface : public wf::surface_interface_t,
 
     /* wf::compositor_surface_t implementation */
     virtual void on_pointer_enter(int x, int y) override
-    {
-        cursor_x = x;
-        cursor_y = y;
-
-        update_cursor();
-    }
+    { layout.handle_motion(x, y); }
 
     virtual void on_pointer_leave() override
-    { }
+    { layout.handle_focus_lost(); }
 
-    int cursor_x, cursor_y;
     virtual void on_pointer_motion(int x, int y) override
-    {
-        cursor_x = x;
-        cursor_y = y;
-
-        update_cursor();
-    }
+    { layout.handle_motion(x, y); }
 
     void send_move_request()
     {
@@ -190,57 +179,50 @@ class simple_decoration_surface : public wf::surface_interface_t,
         get_output()->emit_signal("move-request", &move_request);
     }
 
-    void send_resize_request(int x, int y)
+    void send_resize_request(uint32_t edges)
     {
         resize_request_signal resize_request;
         resize_request.view = view;
-        resize_request.edges = get_edges(x, y);
+        resize_request.edges = edges;
         get_output()->emit_signal("resize-request", &resize_request);
-    }
-
-    uint32_t get_edges(int x, int y)
-    {
-        uint32_t edges = 0;
-        if (x <= current_thickness)
-            edges |= WLR_EDGE_LEFT;
-        if (x >= width - current_thickness)
-            edges |= WLR_EDGE_RIGHT;
-        if (y <= current_thickness)
-            edges |= WLR_EDGE_TOP;
-        if (y >= height - current_thickness)
-            edges |= WLR_EDGE_BOTTOM;
-
-        return edges;
-    }
-
-    std::string get_cursor(uint32_t edges)
-    {
-        if (edges)
-            return wlr_xcursor_get_resize_name((wlr_edges) edges);
-        return "default";
-    }
-
-    void update_cursor()
-    {
-        wf::get_core().set_cursor(get_cursor(get_edges(cursor_x, cursor_y)));
     }
 
     virtual void on_pointer_button(uint32_t button, uint32_t state) override
     {
-        if (button != BTN_LEFT || state != WLR_BUTTON_PRESSED)
+        if (button != BTN_LEFT)
             return;
 
-        if (get_edges(cursor_x, cursor_y))
-            return send_resize_request(cursor_x, cursor_y);
-        send_move_request();
+        handle_action(layout.handle_press_event(state == WLR_BUTTON_PRESSED));
+    }
+
+    void handle_action(wf::decor::decoration_layout_t::action_response_t action)
+    {
+        switch (action.action)
+        {
+            case wf::decor::DECORATION_ACTION_MOVE:
+                return send_move_request();
+            case wf::decor::DECORATION_ACTION_RESIZE:
+                return send_resize_request(action.edges);
+            case wf::decor::DECORATION_ACTION_CLOSE:
+                view->close();
+            default:
+                break;
+        }
     }
 
     virtual void on_touch_down(int x, int y) override
     {
-        if (get_edges(x, y))
-            return send_resize_request(x, y);
+        layout.handle_motion(x, y);
+        handle_action(layout.handle_press_event());
+    }
 
-        send_move_request();
+    virtual void on_touch_motion(int x, int y) override
+    { layout.handle_motion(x, y); }
+
+    virtual void on_touch_up() override
+    {
+        handle_action(layout.handle_press_event(false));
+        layout.handle_focus_lost();
     }
 
     /* frame implementation */

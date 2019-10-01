@@ -22,7 +22,7 @@ decoration_theme_t::decoration_theme_t()
     auto section = wf::get_core().config->get_section("decoration");
 
     font_opt       = section->get_option("font", "serif");
-    title_height   = new_static_option("100");
+    title_height   = new_static_option("50");
     border_size    = new_static_option("5");
     active_color   = new_static_option("0.15 0.15 0.15 0.8");
     inactive_color = new_static_option("0.25 0.25 0.25 0.95");
