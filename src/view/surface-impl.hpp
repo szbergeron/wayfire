@@ -43,9 +43,6 @@ class wlr_surface_base_t
     wf::wl_listener_wrapper::callback_t handle_new_subsurface;
     wf::wl_listener_wrapper on_commit, on_destroy, on_new_subsurface;
 
-    virtual void damage_surface_box(const wlr_box& box);
-    virtual void damage_surface_region(const wf_region& region);
-
     void apply_surface_damage();
     virtual void _wlr_render_box(const wf_framebuffer& fb, int x, int y,
         const wlr_box& scissor);
