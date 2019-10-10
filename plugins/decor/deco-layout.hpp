@@ -43,9 +43,15 @@ struct decoration_area_t
     decoration_area_t(decoration_area_type_t type, wf_geometry g);
 
     /**
-     * Initialize a new decoration area holding a button
+     * Initialize a new decoration area holding a button.
+     *
+     * @param g The geometry of the button.
+     * @param damage_callback Callback to execute when button needs repaint.
+     * @param theme The theme to use for the button.
      */
-    decoration_area_t(wf_geometry g, const decoration_theme_t& theme);
+    decoration_area_t(wf_geometry g,
+        std::function<void(wlr_box)> damage_callback,
+        const decoration_theme_t& theme);
 
     /** @return The geometry of the decoration area, relative to the layout */
     wf_geometry get_geometry() const;
@@ -95,8 +101,12 @@ class decoration_layout_t
     /**
      * Create a new decoration layout for the given theme.
      * When the theme changes, the decoration layout needs to be created again.
+     *
+     * @param damage_callback The function to be called when a part of the
+     * layout needs a repaint.
      */
-    decoration_layout_t(const decoration_theme_t& theme);
+    decoration_layout_t(const decoration_theme_t& theme,
+        std::function<void(wlr_box)> damage_callback);
 
     /** Regenerate layout using the new size */
     void resize(int width, int height);
@@ -141,6 +151,8 @@ class decoration_layout_t
     const int button_padding;
     const decoration_theme_t& theme;
 
+    std::function<void(wlr_box)> damage_callback;
+
     int total_width = 0;
     int total_height = 0;
     std::vector<std::unique_ptr<decoration_area_t>> layout_areas;
@@ -161,6 +173,9 @@ class decoration_layout_t
      * @return The layout area or null on failure
      */
     nonstd::observer_ptr<decoration_area_t> find_area_at(wf_point point);
+
+    /** Unset hover state of hovered button at @position, if any */
+    void unset_hover(wf_point position);
 
 };
 }

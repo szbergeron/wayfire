@@ -2,19 +2,29 @@
 #include "deco-theme.hpp"
 #include <opengl.hpp>
 #include <cairo-util.hpp>
+#include <debug.hpp>
+
+#define HOVERED  1.0
+#define NORMAL   0.0
+#define PRESSED -0.7
 
 namespace wf
 {
 namespace decor
 {
 
-button_t::button_t(const decoration_theme_t& t)
-    : theme(t) {}
+button_t::button_t(const decoration_theme_t& t, std::function<void()> damage)
+    : theme(t), damage_callback(damage)
+{
+    this->hover = wf_duration{new_static_option("300")};
+}
 
 void button_t::set_button_type(button_type_t type)
 {
     this->type = type;
+    this->hover.start(0, 0);
     update_texture();
+    add_idle_damage();
 }
 
 button_type_t button_t::get_button_type() const
@@ -24,12 +34,32 @@ button_type_t button_t::get_button_type() const
 
 void button_t::set_hover(bool is_hovered)
 {
-    // TODO
-}
+    this->is_hovered = is_hovered;
+    if (!this->is_pressed)
+    {
+        if (is_hovered) {
+            this->hover.start(this->hover.progress(), HOVERED);
+        } else {
+            this->hover.start(this->hover.progress(), NORMAL);
+        }
+    }
 
-bool button_t::needs_repaint()
+    add_idle_damage();
+}
+/**
+ * Set whether the button is pressed or not.
+ * Affects appearance.
+ */
+void button_t::set_pressed(bool is_pressed)
 {
-    return true;
+    this->is_pressed = is_pressed;
+    if (is_pressed) {
+        this->hover.start(this->hover.progress(), PRESSED);
+    } else {
+        this->hover.start(this->hover.progress(), is_hovered ? HOVERED : NORMAL);
+    }
+
+    add_idle_damage();
 }
 
 void button_t::render(const wf_framebuffer& fb, wf_geometry geometry,
@@ -51,18 +81,38 @@ void button_t::render(const wf_framebuffer& fb, wf_geometry geometry,
         TEXTURE_TRANSFORM_INVERT_Y);
 
     OpenGL::render_end();
+
+    if (this->hover.running())
+        add_idle_damage();
 }
 
 void button_t::update_texture()
 {
-    // XXX: we render at a predefined resolution here ...
-    const int WIDTH = 60;
-    const int HEIGHT = 30;
+    /* We render a big predefined resolution here */
+    const int WIDTH = 25;
+    const int HEIGHT = 16;
+    const int BORDER = 1;
+    const int SCALE = 4;
 
-    auto surface = theme.get_button_surface(type, WIDTH, HEIGHT);
+    decoration_theme_t::button_state_t state = {
+        .width = WIDTH * SCALE,
+        .height = HEIGHT * SCALE,
+        .border = BORDER * SCALE,
+        .hover_progress = this->hover.progress(),
+    };
+
+    auto surface = theme.get_button_surface(type, state);
     OpenGL::render_begin();
     cairo_surface_upload_to_texture(surface, this->button_texture);
     OpenGL::render_end();
+}
+
+void button_t::add_idle_damage()
+{
+    this->idle_damage.run_once([=] () {
+        this->damage_callback();
+        update_texture();
+    });
 }
 
 }
