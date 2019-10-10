@@ -106,16 +106,17 @@ void wf::LogicalPointer::update_cursor_focus(wf::surface_interface_t *focus,
     if (focus && !this->focus_enabled())
         return;
 
-    /* Send leave to old focus if compositor surface */
-    wf::compositor_surface_t *compositor_surface =
-        wf_compositor_surface_from_surface(cursor_focus);
-    if (compositor_surface)
-        compositor_surface->on_pointer_leave();
-
     bool focus_change = (cursor_focus != focus);
     if (focus_change) {
         log_debug("change cursor focus %p -> %p", cursor_focus, focus);
     }
+
+    /* Send leave to old focus if compositor surface */
+    wf::compositor_surface_t *compositor_surface =
+        wf_compositor_surface_from_surface(cursor_focus);
+    if (compositor_surface && focus_change)
+        compositor_surface->on_pointer_leave();
+
 
     cursor_focus = focus;
     wlr_surface *next_focus_wlr_surface = nullptr;
@@ -129,8 +130,11 @@ void wf::LogicalPointer::update_cursor_focus(wf::surface_interface_t *focus,
         wlr_seat_pointer_clear_focus(input->seat);
     }
 
-    if ((compositor_surface = wf_compositor_surface_from_surface(focus)))
+    if (focus_change &&
+        (compositor_surface = wf_compositor_surface_from_surface(focus)))
+    {
         compositor_surface->on_pointer_enter(local.x, local.y);
+    }
 
     if (focus_change)
     {
