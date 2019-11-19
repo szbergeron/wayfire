@@ -1,3 +1,4 @@
 option('enable_gles32', type: 'boolean', value: true, description: 'Enable usage of GLES 3.2')
 option('enable_debug_output', type: 'boolean', value: false, description: 'Enable debug messages')
 option('enable_graphics_debug', type: 'boolean', value: false, description: 'Enable debug graphics overlays')
+option('wlroots', type: 'combo', choices: ['subproject', 'external'], value: 'subproject', description: 'Build wlroots as internal subproject or use external wlroots')
