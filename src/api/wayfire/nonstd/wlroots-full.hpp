@@ -31,6 +31,7 @@ extern "C"
 #undef static
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_viewporter.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
 
 #include <wlr/types/wlr_output_damage.h>
 #include <wlr/types/wlr_presentation_time.h>

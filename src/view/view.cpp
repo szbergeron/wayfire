@@ -481,6 +481,21 @@ void wf::view_interface_t::set_fullscreen(bool full)
 
     this->emit_signal("fullscreen", &data);
     desktop_state_updated();
+
+    if (!get_wlr_surface())
+    {
+        return;
+    }
+
+    if (!full)
+    {
+        LOGI("Disabling direct scan-out for ", get_app_id());
+	wlr_linux_dmabuf_v1_set_surface_feedback(wf::get_core().protocols.linux_dmabuf_v1,
+            get_wlr_surface(), NULL);
+        return;
+    }
+
+    enable_dmabuf_feedback(get_wlr_surface());
 }
 
 void wf::view_interface_t::set_activated(bool active)

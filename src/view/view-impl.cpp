@@ -6,6 +6,10 @@
 #include "wayfire/signal-definitions.hpp"
 #include "wayfire/workspace-manager.hpp"
 #include <wayfire/util/log.hpp>
+#include "linux-dmabuf-unstable-v1-protocol.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "xdg-shell.hpp"
 
@@ -306,6 +310,75 @@ void wf::wlr_view_t::commit()
     this->last_bounding_box = get_bounding_box();
 }
 
+static bool devid_from_fd(int fd, dev_t *devid) {
+	struct stat stat;
+	if (fstat(fd, &stat) != 0) {
+		LOGE("fstat failed");
+		return false;
+	}
+	*devid = stat.st_rdev;
+	return true;
+}
+
+void wf::view_interface_t::enable_dmabuf_feedback(wlr_surface *surface)
+{
+    // Adapted from sway
+    const struct wlr_drm_format_set *renderer_formats =
+        wlr_renderer_get_dmabuf_texture_formats(wf::get_core().renderer);
+    assert(renderer_formats);
+
+    int renderer_drm_fd = wlr_renderer_get_drm_fd(wf::get_core().renderer);
+    int backend_drm_fd = wlr_backend_get_drm_fd(wf::get_core().backend);
+    if (renderer_drm_fd < 0 || backend_drm_fd < 0) {
+        LOGE("get_drm_fd");
+        return;
+    }
+
+    dev_t render_dev, scanout_dev;
+    if (!devid_from_fd(renderer_drm_fd, &render_dev) ||
+        !devid_from_fd(backend_drm_fd, &scanout_dev)) {
+        LOGE("devid");
+        return;
+    }
+
+    const struct wlr_drm_format_set *output_formats =
+        wlr_output_get_primary_formats(get_output()->handle,
+        WLR_BUFFER_CAP_DMABUF);
+    if (!output_formats) {
+        LOGE("output_formats");
+        return;
+    }
+
+    struct wlr_drm_format_set scanout_formats = {0};
+    if (!wlr_drm_format_set_intersect(&scanout_formats,
+        output_formats, renderer_formats)) {
+        LOGE("wlr_drm_format_set_intersect");
+        return;
+    }
+
+    struct wlr_linux_dmabuf_feedback_v1_tranche tranches[] = {
+        {
+            .target_device = scanout_dev,
+            .flags = ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT,
+            .formats = &scanout_formats,
+        },
+        {
+            .target_device = render_dev,
+            .formats = renderer_formats,
+        },
+    };
+
+    const struct wlr_linux_dmabuf_feedback_v1 feedback = {
+        .main_device = render_dev,
+        .tranches_len = sizeof(tranches) / sizeof(tranches[0]),
+        .tranches = tranches,
+    };
+    wlr_linux_dmabuf_v1_set_surface_feedback(wf::get_core().protocols.linux_dmabuf_v1,
+        surface, &feedback);
+
+    wlr_drm_format_set_finish(&scanout_formats);
+}
+
 void wf::wlr_view_t::map(wlr_surface *surface)
 {
     wlr_surface_base_t::map(surface);
@@ -330,6 +403,14 @@ void wf::wlr_view_t::map(wlr_surface *surface)
     emit_view_map();
     /* Might trigger repositioning */
     set_toplevel_parent(this->parent);
+
+    if (!this->fullscreen)
+    {
+        LOGI("!fullscreen");
+        return;
+    }
+
+    view_interface_t::enable_dmabuf_feedback(surface);
 }
 
 void wf::wlr_view_t::unmap()

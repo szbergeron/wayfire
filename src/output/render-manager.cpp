@@ -827,6 +827,7 @@ class wf::render_manager::impl
 
         if (!can_scanout)
         {
+            LOGE("can_scanout");
             return false;
         }
 
@@ -835,6 +836,7 @@ class wf::render_manager::impl
 
         if (views.empty())
         {
+            LOGE("views.empty()");
             return false;
         }
 
@@ -843,6 +845,7 @@ class wf::render_manager::impl
         // The candidate must cover the whole output
         if (candidate->get_output_geometry() != output->get_relative_geometry())
         {
+            LOGE("candidate->get_output_geometry() != output->get_relative_geometry()");
             return false;
         }
 
@@ -851,6 +854,7 @@ class wf::render_manager::impl
             !candidate->priv->surface_children_above.empty() ||
             !candidate->children.empty())
         {
+            LOGE("candidate->has_transformer()");
             return false;
         }
 
@@ -860,6 +864,7 @@ class wf::render_manager::impl
             (surface->current.scale != output->handle->scale) ||
             (surface->current.transform != output->handle->transform))
         {
+            LOGE("surface");
             return false;
         }
 
@@ -868,6 +873,7 @@ class wf::render_manager::impl
         non_opaque ^= candidate->get_opaque_region(wf::point_t{0, 0});
         if (!non_opaque.empty())
         {
+            LOGE("non_opaque.empty()");
             return false;
         }
 
@@ -877,6 +883,7 @@ class wf::render_manager::impl
 
         if (wlr_output_commit(output->handle))
         {
+            LOGI("wlr_output_commit() success");
             if (candidate != last_scanout)
             {
                 last_scanout = candidate;
