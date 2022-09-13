@@ -44,7 +44,6 @@ extern "C"
     struct wlr_surface;
     struct wlr_texture;
     struct wlr_viewporter;
-    struct wlr_linux_dmabuf_v1;
 
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>

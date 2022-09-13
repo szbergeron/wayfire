@@ -52,8 +52,6 @@ constexpr uint32_t TILED_EDGES_ALL =
 class view_interface_t : public surface_interface_t
 {
   public:
-
-    void enable_dmabuf_feedback(wlr_surface *surface);
     /**
      * The toplevel parent of the view, for ex. the main view of a file chooser
      * dialogue.
