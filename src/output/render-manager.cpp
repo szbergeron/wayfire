@@ -818,18 +818,6 @@ class wf::render_manager::impl
      */
     bool do_direct_scanout()
     {
-        const bool can_scanout =
-            !wf::get_core_impl().seat->drag_active &&
-            !output_inhibit_counter &&
-            !renderer &&
-            effects->can_scanout() &&
-            postprocessing->can_scanout();
-
-        if (!can_scanout)
-        {
-            LOGE("can_scanout");
-            return false;
-        }
 
         auto views = output->workspace->get_views_on_workspace(
             output->workspace->get_current_workspace(), wf::VISIBLE_LAYERS);
@@ -841,11 +829,30 @@ class wf::render_manager::impl
         }
 
         auto candidate = views.front();
-
-        // The candidate must cover the whole output
         if (candidate->get_output_geometry() != output->get_relative_geometry())
         {
-            LOGE("candidate->get_output_geometry() != output->get_relative_geometry()");
+            //LOGE("candidate->get_output_geometry() != output->get_relative_geometry()");
+            return false;
+        }
+
+        bool a = !wf::get_core_impl().seat->drag_active;
+        bool b = !output_inhibit_counter;
+        bool c = !renderer;
+        bool d = effects->can_scanout();
+        bool e = postprocessing->can_scanout();
+
+        LOGE("bools: %b, %b, %b, %b, %b", a, b, c, d, e);
+
+        const bool can_scanout =
+            !wf::get_core_impl().seat->drag_active &&
+            !output_inhibit_counter &&
+            !renderer &&
+            effects->can_scanout() &&
+            postprocessing->can_scanout();
+
+        if (!can_scanout)
+        {
+            LOGE("can_scanout");
             return false;
         }
 
