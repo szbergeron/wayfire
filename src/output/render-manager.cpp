@@ -887,7 +887,7 @@ class wf::render_manager::impl
             return true;
         } else
         {
-            LOGD("Failed to scan out view ", candidate->get_title());
+            LOGD("Latest | Failed to scan out view ", candidate->get_title());
             return false;
         }
     }
