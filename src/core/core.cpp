@@ -294,6 +294,7 @@ void wf::compositor_core_impl_t::init()
 
     protocols.presentation = wlr_presentation_create(display, backend);
     protocols.viewporter   = wlr_viewporter_create(display);
+    protocols.linux_dmabuf_v1 = wlr_linux_dmabuf_v1_create(display, renderer);
 
     protocols.foreign_registry = wlr_xdg_foreign_registry_create(display);
     protocols.foreign_v1 = wlr_xdg_foreign_v1_create(display,
